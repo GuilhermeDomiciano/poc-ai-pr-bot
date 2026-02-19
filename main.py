@@ -11,6 +11,7 @@ from infrastructure.repo.operations import (
     repo_tree_summary,
     run,
 )
+from infrastructure.repo.file_writer import apply_files
 
 load_dotenv()
 
@@ -21,12 +22,6 @@ def safe_slug(s: str) -> str:
     s = s.lower()
     s = re.sub(r"[^a-z0-9]+", "-", s).strip("-")
     return s[:50] or "change"
-
-def apply_files(files_map):
-    for rel_path, content in files_map.items():
-        p = REPODIR / rel_path
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(content, encoding="utf-8")
 
 def main():
     gh = GitHubClient()
@@ -60,7 +55,7 @@ def main():
     pr_title = payload.pr_title
     pr_body = payload.pr_body
 
-    apply_files(files_map)
+    apply_files(REPODIR, files_map)
 
     run(["git", "checkout", "-b", branch], cwd=REPODIR)
     run(["git", "add", "."], cwd=REPODIR)
