@@ -4,40 +4,40 @@ import subprocess
 from pathlib import Path
 
 
-def run(cmd, cwd=None):
-    print(">>", " ".join(cmd))
-    subprocess.check_call(cmd, cwd=cwd)
+def run(command, cwd=None):
+    print(">>", " ".join(command))
+    subprocess.check_call(command, cwd=cwd)
 
 
-def run_capture(cmd, cwd=None):
-    print(">>", " ".join(cmd))
-    return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+def run_capture(command, cwd=None):
+    print(">>", " ".join(command))
+    return subprocess.run(command, cwd=cwd, capture_output=True, text=True)
 
 
-def clone_repo(owner: str, repo: str, token: str, repodir: Path):
-    if repodir.exists():
-        shutil.rmtree(repodir)
-    url = f"https://x-access-token:{token}@github.com/{owner}/{repo}.git"
-    run(["git", "clone", url, str(repodir)])
+def clone_repo(owner: str, repo: str, token: str, repo_dir: Path):
+    if repo_dir.exists():
+        shutil.rmtree(repo_dir)
+    clone_url = f"https://x-access-token:{token}@github.com/{owner}/{repo}.git"
+    run(["git", "clone", clone_url, str(repo_dir)])
 
 
-def repo_tree_summary(repodir: Path) -> str:
-    paths = []
-    for p in repodir.rglob("*"):
-        if p.is_file() and p.stat().st_size < 20000:
-            rel = p.relative_to(repodir)
-            if any(part.startswith(".git") for part in rel.parts):
+def repo_tree_summary(repo_dir: Path) -> str:
+    file_paths = []
+    for file_path in repo_dir.rglob("*"):
+        if file_path.is_file() and file_path.stat().st_size < 20000:
+            relative_path = file_path.relative_to(repo_dir)
+            if any(part.startswith(".git") for part in relative_path.parts):
                 continue
-            paths.append(str(rel))
-    return "\n".join(paths[:200])
+            file_paths.append(str(relative_path))
+    return "\n".join(file_paths[:200])
 
 
-def git_setup(repodir: Path):
-    run(["git", "config", "user.name", os.getenv("GIT_AUTHOR_NAME", "AI Bot")], cwd=repodir)
-    run(["git", "config", "user.email", os.getenv("GIT_AUTHOR_EMAIL", "ai-bot@example.com")], cwd=repodir)
-    run(["git", "config", "--local", "credential.helper", ""], cwd=repodir)
+def git_setup(repo_dir: Path):
+    run(["git", "config", "user.name", os.getenv("GIT_AUTHOR_NAME", "AI Bot")], cwd=repo_dir)
+    run(["git", "config", "user.email", os.getenv("GIT_AUTHOR_EMAIL", "ai-bot@example.com")], cwd=repo_dir)
+    run(["git", "config", "--local", "credential.helper", ""], cwd=repo_dir)
 
 
-def remote_branch_exists(branch: str, repodir: Path) -> bool:
-    r = run_capture(["git", "ls-remote", "--exit-code", "--heads", "origin", branch], cwd=repodir)
-    return r.returncode == 0
+def remote_branch_exists(branch: str, repo_dir: Path) -> bool:
+    command_result = run_capture(["git", "ls-remote", "--exit-code", "--heads", "origin", branch], cwd=repo_dir)
+    return command_result.returncode == 0
