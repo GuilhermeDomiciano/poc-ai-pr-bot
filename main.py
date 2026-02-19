@@ -1,4 +1,4 @@
-import os, re
+import os
 from pathlib import Path
 from dotenv import load_dotenv
 from application.run_issue_flow import (
@@ -23,11 +23,6 @@ load_dotenv()
 
 WORKDIR = Path("/work")
 REPODIR = WORKDIR / "repo"
-
-def safe_slug(text: str) -> str:
-    normalized_text = text.lower()
-    normalized_text = re.sub(r"[^a-z0-9]+", "-", normalized_text).strip("-")
-    return normalized_text[:50] or "change"
 
 def main():
     github_client = GitHubClient()
