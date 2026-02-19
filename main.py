@@ -2,7 +2,7 @@ import os, re
 from pathlib import Path
 from dotenv import load_dotenv
 from infrastructure.github.github_client import GitHubClient
-from crew_flow import build_crew
+from infrastructure.ai.crew_runner import run_crew
 from domain.payload_parser import parse_payload
 from infrastructure.repo.file_writer import apply_files
 from infrastructure.repo.operations import (
@@ -41,12 +41,7 @@ def main():
 
     repository_tree_summary = repo_tree_summary(REPODIR)
 
-    issue_crew = build_crew(issue_title, issue_body, repository_tree_summary)
-    crew_result = issue_crew.kickoff()
-
-    # CrewAI result: output must be standardized as simple JSON.
-    # To keep this simple, write issues asking for a "JSON-only response".
-    crew_output_text = str(crew_result)
+    crew_output_text = run_crew(issue_title, issue_body, repository_tree_summary)
 
     change_set = parse_payload(crew_output_text)
 
