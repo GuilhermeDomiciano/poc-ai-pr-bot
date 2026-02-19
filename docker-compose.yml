@@ -1,0 +1,7 @@
+services:
+  poc:
+    build: .
+    env_file:
+      - .env
+    volumes:
+      - ./work:/work
