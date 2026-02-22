@@ -15,7 +15,8 @@ class IssueFlowConfig:
 
 @dataclass(frozen=True)
 class IssueFlowDependencies:
-    github_client: Any
+    get_issue: Callable[[int], dict[str, Any]]
+    create_pr: Callable[..., dict[str, Any]]
     clone_repo: Callable[[str, str, str, Path], None]
     git_setup: Callable[[Path], None]
     repo_tree_summary: Callable[[Path], str]
@@ -27,7 +28,7 @@ class IssueFlowDependencies:
 
 
 def run_issue_flow(config: IssueFlowConfig, dependencies: IssueFlowDependencies):
-    issue_data = dependencies.github_client.get_issue(config.issue_number)
+    issue_data = dependencies.get_issue(config.issue_number)
     issue_title = issue_data["title"]
     issue_body = issue_data.get("body") or ""
 
@@ -58,7 +59,7 @@ def run_issue_flow(config: IssueFlowConfig, dependencies: IssueFlowDependencies)
         print(f"Branch pushed successfully: {change_set.branch}")
         return
 
-    pull_request = dependencies.github_client.create_pr(
+    pull_request = dependencies.create_pr(
         head=change_set.branch,
         base=config.base_branch,
         title=change_set.pr_title,

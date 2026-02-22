@@ -36,7 +36,8 @@ def main():
     )
 
     flow_dependencies = IssueFlowDependencies(
-        github_client=github_client,
+        get_issue=github_client.get_issue,
+        create_pr=github_client.create_pr,
         clone_repo=clone_repo,
         git_setup=git_setup,
         repo_tree_summary=repo_tree_summary,
