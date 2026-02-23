@@ -33,6 +33,7 @@ def main():
         github_token=os.environ["GITHUB_TOKEN"],
         base_branch=os.getenv("GH_BASE_BRANCH", "main"),
         repository_directory=REPODIR,
+        dry_run=False,
     )
 
     flow_dependencies = IssueFlowDependencies(

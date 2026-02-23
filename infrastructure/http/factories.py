@@ -29,5 +29,5 @@ def build_issue_flow_config_from_request(
         github_token=github_token,
         base_branch=payload.base_branch,
         repository_directory=repository_directory,
+        dry_run=payload.dry_run,
     )
-

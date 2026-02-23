@@ -11,6 +11,7 @@ class IssueFlowConfig:
     github_token: str
     base_branch: str
     repository_directory: Path
+    dry_run: bool = False
 
 
 @dataclass(frozen=True)
@@ -32,6 +33,8 @@ class IssueFlowResult:
     status: str
     message: str
     branch: str | None = None
+    commit: str | None = None
+    pr_title: str | None = None
     pr_url: str | None = None
     error: str | None = None
 
@@ -59,6 +62,16 @@ def run_issue_flow(
         crew_output_text = dependencies.run_crew(issue_title, issue_body, repository_tree_summary)
         change_set = dependencies.parse_payload(crew_output_text)
 
+        if config.dry_run:
+            return IssueFlowResult(
+                status="dry_run",
+                message="Dry run completed with no repository or PR changes",
+                branch=change_set.branch,
+                commit=change_set.commit,
+                pr_title=change_set.pr_title,
+                pr_url=None,
+            )
+
         dependencies.apply_files(config.repository_directory, change_set.files)
 
         dependencies.run_command(["git", "checkout", "-b", change_set.branch], cwd=config.repository_directory)
@@ -75,6 +88,8 @@ def run_issue_flow(
             return IssueFlowResult(
                 status="success",
                 branch=change_set.branch,
+                commit=change_set.commit,
+                pr_title=change_set.pr_title,
                 pr_url=None,
                 message=f"Branch pushed successfully: {change_set.branch}",
             )
@@ -89,6 +104,8 @@ def run_issue_flow(
         return IssueFlowResult(
             status="success",
             branch=change_set.branch,
+            commit=change_set.commit,
+            pr_title=change_set.pr_title,
             pr_url=pull_request["html_url"],
             message="PR created successfully",
         )

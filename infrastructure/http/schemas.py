@@ -14,6 +14,8 @@ class RunWorkflowResponse(BaseModel):
     status: str
     message: str
     branch: str | None = None
+    commit: str | None = None
+    pr_title: str | None = None
     pr_url: str | None = None
     error: str | None = None
 
@@ -23,6 +25,8 @@ class RunWorkflowResponse(BaseModel):
             status=result.status,
             message=result.message,
             branch=result.branch,
+            commit=result.commit,
+            pr_title=result.pr_title,
             pr_url=result.pr_url,
             error=result.error,
         )
