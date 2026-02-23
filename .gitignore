@@ -53,4 +53,4 @@ Thumbs.db
 # Local runtime workspace mounted by docker-compose
 work/
 
-architectural_suggestion.md
+implementacao.md
