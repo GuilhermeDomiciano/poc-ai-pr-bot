@@ -1,7 +1,7 @@
 from crewai import Agent, Task, Crew
 
 
-def build_crew(issue_title: str, issue_body: str, repo_tree: str):
+def build_crew(issue_title: str, issue_body: str, repo_tree: str) -> Crew:
     dev = Agent(
         role="Backend Dev",
         goal="Implement the issue with minimal, clear changes.",

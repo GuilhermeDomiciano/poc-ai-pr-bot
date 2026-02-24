@@ -1,9 +1,10 @@
 import json
+from typing import Any
 
 from domain.models import ChangeSet
 
 
-def extract_first_json_object(text: str):
+def extract_first_json_object(text: str) -> dict[str, Any] | None:
     decoder = json.JSONDecoder()
     for character_index, character in enumerate(text):
         if character != "{":

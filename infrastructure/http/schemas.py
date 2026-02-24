@@ -1,4 +1,3 @@
-from application.run_issue_flow import IssueFlowResult
 from pydantic import BaseModel, Field
 
 
@@ -17,16 +16,3 @@ class RunWorkflowResponse(BaseModel):
     commit: str | None = None
     pr_title: str | None = None
     pr_url: str | None = None
-    error: str | None = None
-
-    @classmethod
-    def from_issue_flow_result(cls, result: IssueFlowResult) -> "RunWorkflowResponse":
-        return cls(
-            status=result.status,
-            message=result.message,
-            branch=result.branch,
-            commit=result.commit,
-            pr_title=result.pr_title,
-            pr_url=result.pr_url,
-            error=result.error,
-        )

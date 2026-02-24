@@ -48,16 +48,22 @@ cp .env.example .env
 Edit `.env`:
 
 ```env
+# Required for CLI and HTTP
 OPENAI_API_KEY=...
 GITHUB_TOKEN=...
+
+# Required for CLI (`python main.py`)
 GH_OWNER=your-org-or-user
 GH_REPO=your-repo
 ISSUE_NUMBER=1
+
+# Optional
+GH_BASE_BRANCH=main
 GIT_AUTHOR_NAME=AI Bot
 GIT_AUTHOR_EMAIL=ai-bot@example.com
-# Optional:
-# GH_BASE_BRANCH=main
 ```
+
+For HTTP mode (`POST /workflow/run`), `owner`, `repo` and `issue_number` come from request payload; `OPENAI_API_KEY` and `GITHUB_TOKEN` are still required in environment.
 
 ## Run
 

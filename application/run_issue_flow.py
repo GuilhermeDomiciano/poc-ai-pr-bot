@@ -1,6 +1,17 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Callable, TypedDict
+
+from domain.models import ChangeSet
+
+
+class IssueData(TypedDict, total=False):
+    title: str
+    body: str | None
+
+
+class PullRequestData(TypedDict):
+    html_url: str
 
 
 @dataclass(frozen=True)
@@ -8,7 +19,6 @@ class IssueFlowConfig:
     issue_number: int
     repository_owner: str
     repository_name: str
-    github_token: str
     base_branch: str
     repository_directory: Path
     dry_run: bool = False
@@ -16,15 +26,15 @@ class IssueFlowConfig:
 
 @dataclass(frozen=True)
 class IssueFlowDependencies:
-    get_issue: Callable[[int], dict[str, Any]]
-    create_pr: Callable[..., dict[str, Any]]
-    clone_repo: Callable[[str, str, str, Path], None]
+    get_issue: Callable[[int], IssueData]
+    create_pr: Callable[..., PullRequestData]
+    clone_repo: Callable[[str, str, Path], None]
     git_setup: Callable[[Path], None]
     repo_tree_summary: Callable[[Path], str]
     run_crew: Callable[[str, str, str], str]
-    parse_payload: Callable[[str], Any]
+    parse_payload: Callable[[str], ChangeSet]
     apply_files: Callable[[Path, dict[str, str]], None]
-    run_command: Callable[..., None]
+    publish_changes: Callable[[Path, str, str], None]
     remote_branch_exists: Callable[[str, Path], bool]
 
 
@@ -39,6 +49,94 @@ class IssueFlowResult:
     error: str | None = None
 
 
+def _load_issue_context(config: IssueFlowConfig, dependencies: IssueFlowDependencies) -> tuple[str, str]:
+    issue_data = dependencies.get_issue(config.issue_number)
+    issue_title = issue_data["title"]
+    issue_body = issue_data.get("body") or ""
+    return issue_title, issue_body
+
+
+def _prepare_repository(config: IssueFlowConfig, dependencies: IssueFlowDependencies) -> None:
+    dependencies.clone_repo(
+        config.repository_owner,
+        config.repository_name,
+        config.repository_directory,
+    )
+    dependencies.git_setup(config.repository_directory)
+
+
+def _build_change_set(
+    issue_title: str,
+    issue_body: str,
+    config: IssueFlowConfig,
+    dependencies: IssueFlowDependencies,
+) -> ChangeSet:
+    repository_tree_summary = dependencies.repo_tree_summary(config.repository_directory)
+    crew_output_text = dependencies.run_crew(issue_title, issue_body, repository_tree_summary)
+    return dependencies.parse_payload(crew_output_text)
+
+
+def _build_dry_run_result(change_set: ChangeSet) -> IssueFlowResult:
+    return IssueFlowResult(
+        status="dry_run",
+        message="Dry run completed with no repository or PR changes",
+        branch=change_set.branch,
+        commit=change_set.commit,
+        pr_title=change_set.pr_title,
+        pr_url=None,
+    )
+
+
+def _build_success_result(
+    change_set: ChangeSet,
+    *,
+    message: str,
+    pr_url: str | None,
+) -> IssueFlowResult:
+    return IssueFlowResult(
+        status="success",
+        branch=change_set.branch,
+        commit=change_set.commit,
+        pr_title=change_set.pr_title,
+        pr_url=pr_url,
+        message=message,
+    )
+
+
+def _publish_repository_changes(
+    config: IssueFlowConfig,
+    dependencies: IssueFlowDependencies,
+    change_set: ChangeSet,
+) -> None:
+    dependencies.apply_files(config.repository_directory, change_set.files)
+    dependencies.publish_changes(config.repository_directory, change_set.branch, change_set.commit)
+
+
+def _build_pr_or_branch_result(
+    config: IssueFlowConfig,
+    dependencies: IssueFlowDependencies,
+    change_set: ChangeSet,
+) -> IssueFlowResult:
+    if not dependencies.remote_branch_exists(config.base_branch, config.repository_directory):
+        return _build_success_result(
+            change_set,
+            message=f"Branch pushed successfully: {change_set.branch}",
+            pr_url=None,
+        )
+
+    pull_request = dependencies.create_pr(
+        head=change_set.branch,
+        base=config.base_branch,
+        title=change_set.pr_title,
+        body=change_set.pr_body,
+    )
+    return _build_success_result(
+        change_set,
+        message="PR created successfully",
+        pr_url=pull_request["html_url"],
+    )
+
+
 def run_issue_flow(
     config: IssueFlowConfig,
     dependencies: IssueFlowDependencies,
@@ -46,69 +144,15 @@ def run_issue_flow(
     raise_on_error: bool = True,
 ) -> IssueFlowResult:
     try:
-        issue_data = dependencies.get_issue(config.issue_number)
-        issue_title = issue_data["title"]
-        issue_body = issue_data.get("body") or ""
-
-        dependencies.clone_repo(
-            config.repository_owner,
-            config.repository_name,
-            config.github_token,
-            config.repository_directory,
-        )
-        dependencies.git_setup(config.repository_directory)
-
-        repository_tree_summary = dependencies.repo_tree_summary(config.repository_directory)
-        crew_output_text = dependencies.run_crew(issue_title, issue_body, repository_tree_summary)
-        change_set = dependencies.parse_payload(crew_output_text)
+        issue_title, issue_body = _load_issue_context(config, dependencies)
+        _prepare_repository(config, dependencies)
+        change_set = _build_change_set(issue_title, issue_body, config, dependencies)
 
         if config.dry_run:
-            return IssueFlowResult(
-                status="dry_run",
-                message="Dry run completed with no repository or PR changes",
-                branch=change_set.branch,
-                commit=change_set.commit,
-                pr_title=change_set.pr_title,
-                pr_url=None,
-            )
+            return _build_dry_run_result(change_set)
 
-        dependencies.apply_files(config.repository_directory, change_set.files)
-
-        dependencies.run_command(["git", "checkout", "-b", change_set.branch], cwd=config.repository_directory)
-        dependencies.run_command(["git", "add", "."], cwd=config.repository_directory)
-        dependencies.run_command(["git", "commit", "-m", change_set.commit], cwd=config.repository_directory)
-        dependencies.run_command(["git", "push", "-u", "origin", change_set.branch], cwd=config.repository_directory)
-
-        if not dependencies.remote_branch_exists(config.base_branch, config.repository_directory):
-            print(
-                f"Base branch '{config.base_branch}' does not exist on remote. "
-                "Skipping PR creation (common for empty/new repositories)."
-            )
-            print(f"Branch pushed successfully: {change_set.branch}")
-            return IssueFlowResult(
-                status="success",
-                branch=change_set.branch,
-                commit=change_set.commit,
-                pr_title=change_set.pr_title,
-                pr_url=None,
-                message=f"Branch pushed successfully: {change_set.branch}",
-            )
-
-        pull_request = dependencies.create_pr(
-            head=change_set.branch,
-            base=config.base_branch,
-            title=change_set.pr_title,
-            body=change_set.pr_body,
-        )
-        print("PR created:", pull_request["html_url"])
-        return IssueFlowResult(
-            status="success",
-            branch=change_set.branch,
-            commit=change_set.commit,
-            pr_title=change_set.pr_title,
-            pr_url=pull_request["html_url"],
-            message="PR created successfully",
-        )
+        _publish_repository_changes(config, dependencies, change_set)
+        return _build_pr_or_branch_result(config, dependencies, change_set)
     except Exception as error:
         if raise_on_error:
             raise

@@ -1,27 +1,27 @@
 import logging
-import os
 import re
-from typing import Iterable
+from typing import Any, Iterable
 
 from infrastructure.observability.context import get_request_id
 
 
-_SENSITIVE_ENV_KEYS = (
-    "OPENAI_API_KEY",
-    "GITHUB_TOKEN",
-    "GH_TOKEN",
-)
 _TOKEN_PATTERNS = (
     re.compile(r"(x-access-token:)[^@\s]+", re.IGNORECASE),
     re.compile(r"(Bearer\s+)[A-Za-z0-9_\-.]+", re.IGNORECASE),
+    re.compile(r"\bgh[pousr]_[A-Za-z0-9_]+\b"),
+    re.compile(r"\bgithub_pat_[A-Za-z0-9_]+\b"),
 )
+_REGISTERED_SENSITIVE_VALUES: set[str] = set()
+
+
+def register_sensitive_values(*values: str) -> None:
+    for value in values:
+        if value:
+            _REGISTERED_SENSITIVE_VALUES.add(value)
 
 
 def _sensitive_values() -> Iterable[str]:
-    for key in _SENSITIVE_ENV_KEYS:
-        value = os.getenv(key)
-        if value:
-            yield value
+    return _REGISTERED_SENSITIVE_VALUES
 
 
 def redact_secrets(text: str) -> str:
@@ -48,7 +48,7 @@ def configure_logging() -> None:
 
     current_factory = logging.getLogRecordFactory()
     if not getattr(current_factory, "_request_id_factory", False):
-        def record_factory(*args, **kwargs):
+        def record_factory(*args: Any, **kwargs: Any) -> logging.LogRecord:
             record = current_factory(*args, **kwargs)
             record.request_id = get_request_id()
             return record
@@ -64,3 +64,27 @@ def configure_logging() -> None:
 
 def safe_message(message: str) -> str:
     return redact_secrets(message)
+
+
+def _format_field_value(value: Any) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, str):
+        return safe_message(value)
+    return safe_message(repr(value))
+
+
+def structured_message(event: str, **fields: Any) -> str:
+    parts = [f"event={safe_message(event)}"]
+    for key, value in fields.items():
+        if value is None:
+            continue
+        formatted_value = _format_field_value(value).replace('"', '\\"')
+        parts.append(f'{key}="{formatted_value}"')
+    return " ".join(parts)
+
+
+def log_event(logger: logging.Logger, level: int, event: str, **fields: Any) -> None:
+    logger.log(level, structured_message(event, **fields))
