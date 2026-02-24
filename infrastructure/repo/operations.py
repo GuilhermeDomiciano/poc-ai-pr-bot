@@ -1,16 +1,34 @@
+import logging
 import os
 import shutil
 import subprocess
 from pathlib import Path
 
+from infrastructure.observability.logging_utils import safe_message
+
+
+logger = logging.getLogger(__name__)
+
 
 def run(command, cwd=None):
-    print(">>", " ".join(command))
-    subprocess.check_call(command, cwd=cwd)
+    logger.info(safe_message(f">> {' '.join(command)}"))
+    result = subprocess.run(command, cwd=cwd, capture_output=True, text=True)
+    if result.returncode != 0:
+        stdout = safe_message(result.stdout.strip()) if result.stdout else ""
+        stderr = safe_message(result.stderr.strip()) if result.stderr else ""
+        if stdout:
+            logger.error(safe_message(f"command stdout: {stdout}"))
+        if stderr:
+            logger.error(safe_message(f"command stderr: {stderr}"))
+        raise RuntimeError(
+            safe_message(
+                f"Command failed (exit_code={result.returncode}): {' '.join(command)}"
+            )
+        )
 
 
 def run_capture(command, cwd=None):
-    print(">>", " ".join(command))
+    logger.info(safe_message(f">> {' '.join(command)}"))
     return subprocess.run(command, cwd=cwd, capture_output=True, text=True)
 
 
