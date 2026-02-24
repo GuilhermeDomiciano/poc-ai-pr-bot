@@ -1,0 +1,56 @@
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+
+# Virtual environments
+.venv/
+.venv*/
+venv/
+env/
+
+# Python cache/artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Packaging/build outputs
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# Test and coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Type check/lint/tool caches
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.tox/
+.nox/
+.hypothesis/
+
+# Logs and runtime files
+*.log
+*.pid
+
+# IDE/editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local runtime workspace mounted by docker-compose
+work/
+
+implementacao.md
