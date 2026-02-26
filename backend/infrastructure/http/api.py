@@ -2,16 +2,21 @@ import logging
 import os
 import time
 import uuid
+import asyncio
+import json
 from collections.abc import Awaitable, Callable
+from queue import Empty
+from typing import Any
 
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.responses import Response
+from starlette.responses import Response, StreamingResponse
 
 from infrastructure.http.errors import to_http_exception
 from infrastructure.http.schemas import RunWorkflowRequest, RunWorkflowResponse
 from infrastructure.http.workflow_service import execute_workflow
 from infrastructure.observability.context import reset_request_id, set_request_id
+from infrastructure.observability.event_stream import subscribe_request_events
 from infrastructure.observability.logging_utils import configure_logging, log_event
 
 
@@ -36,6 +41,10 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["X-Request-ID"],
 )
+
+
+def _format_sse_data(payload: dict[str, Any]) -> str:
+    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
 @app.middleware("http")
@@ -77,10 +86,47 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/workflow/stream/{request_id}")
+async def stream_workflow_logs(request_id: str, request: Request) -> StreamingResponse:
+    event_queue, history, unsubscribe = subscribe_request_events(request_id)
+
+    async def event_generator():
+        try:
+            for history_event in history:
+                yield _format_sse_data(history_event)
+
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    event_payload = await asyncio.to_thread(event_queue.get, True, 15.0)
+                except Empty:
+                    yield _format_sse_data({"type": "ping"})
+                    continue
+                yield _format_sse_data(event_payload)
+        finally:
+            unsubscribe()
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 @app.post("/workflow/run", response_model=RunWorkflowResponse, status_code=status.HTTP_200_OK)
-def run_workflow(payload: RunWorkflowRequest) -> RunWorkflowResponse:
+def run_workflow(payload: RunWorkflowRequest, request: Request) -> RunWorkflowResponse:
+    request_id = getattr(request.state, "request_id", None)
+    token = set_request_id(request_id) if request_id else None
     try:
         return execute_workflow(payload)
     except Exception as error:
         log_event(logger, logging.ERROR, "http.workflow.endpoint_failed", error=str(error))
         raise to_http_exception(error)
+    finally:
+        if token is not None:
+            reset_request_id(token)

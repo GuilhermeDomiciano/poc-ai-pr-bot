@@ -28,6 +28,7 @@ from infrastructure.observability.workflow_observer import (
     is_contract_violation_error,
     log_contract_violation,
     observe_generated_change_set,
+    observe_workflow_step,
 )
 
 
@@ -83,6 +84,7 @@ def main() -> None:
         publish_changes=publish_changes,
         remote_branch_exists=remote_branch_exists,
         observe_change_set=observe_generated_change_set,
+        observe_step=observe_workflow_step,
     )
     try:
         result = run_issue_flow(flow_config, flow_dependencies)

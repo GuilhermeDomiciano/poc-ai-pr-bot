@@ -1,7 +1,7 @@
-import { type FormEvent, useEffect, useMemo, useState } from 'react'
+import { type FormEvent, useMemo, useState } from 'react'
 import './App.css'
-import { checkHealth, getApiBaseUrl, runWorkflow } from './services/workflowApi'
-import type { RunWorkflowResponse } from './types/workflow'
+import { checkHealth, getApiBaseUrl, openWorkflowStream, runWorkflow } from './services/workflowApi'
+import type { RunWorkflowResponse, WorkflowRuntimeEvent } from './types/workflow'
 
 const FLOW_STEPS = [
   {
@@ -32,31 +32,54 @@ const FLOW_STEPS = [
 
 const AGENT_CARDS = [
   {
+    id: 'backend_dev',
     name: 'Backend Dev',
     responsibility: 'Implementa lógica de backend com alterações mínimas e contratos estáveis.',
     scopeLimit: 'Pode editar apenas arquivos em backend/.',
   },
   {
+    id: 'frontend_dev',
     name: 'Frontend Dev',
     responsibility: 'Implementa UI e integração cliente/API com tipagem e estados de feedback.',
     scopeLimit: 'Pode editar apenas arquivos em frontend/.',
   },
   {
+    id: 'integration_engineer',
     name: 'Integration Engineer',
     responsibility: 'Resolve incompatibilidades entre frontend e backend e garante contrato fim a fim.',
     scopeLimit: 'Pode editar backend/ e frontend/ quando necessário para integração.',
   },
   {
+    id: 'qa_reviewer',
     name: 'QA Reviewer',
     responsibility: 'Valida qualidade E2E, segurança e consistência do contrato final.',
     scopeLimit: 'Não implementa feature nova; aprova ou bloqueia com critérios objetivos.',
   },
   {
+    id: 'git_integrator',
     name: 'Git Integrator',
     responsibility: 'Consolida saída final em JSON com arquivos, branch, commit e dados de PR.',
     scopeLimit: 'Entrega estritamente JSON válido e caminhos sob backend/ ou frontend/.',
   },
 ]
+
+const STEP_INDEX_BY_KEY: Record<string, number> = {
+  load_issue: 0,
+  prepare_repo: 1,
+  run_crew: 2,
+  validate_payload: 3,
+  publish_branch: 4,
+  finalize: 5,
+}
+
+const STEP_LABEL_BY_KEY: Record<string, string> = {
+  load_issue: 'Carregar issue',
+  prepare_repo: 'Preparar repositório e git',
+  run_crew: 'Executar crew multiagente',
+  validate_payload: 'Validar payload/contrato',
+  publish_branch: 'Aplicar arquivos e publicar branch',
+  finalize: 'Criar PR/finalização',
+}
 
 type FormState = {
   owner: string
@@ -68,6 +91,10 @@ type FormState = {
 
 type FormErrors = Partial<Record<keyof Omit<FormState, 'dryRun'>, string>>
 type TimelinePhase = 'idle' | 'running' | 'success' | 'error'
+type AgentExecutionSummary = {
+  lastAction: string
+  delivered: string
+}
 
 const INITIAL_FORM: FormState = {
   owner: '',
@@ -93,6 +120,79 @@ function getErrorDetailMessage(error: unknown): string {
   return WORKFLOW_ERROR_FALLBACK
 }
 
+function buildRequestId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `req-${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+function parseRuntimeEvent(data: string): WorkflowRuntimeEvent | null {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(data)
+  } catch {
+    return null
+  }
+
+  if (typeof parsed !== 'object' || parsed === null) {
+    return null
+  }
+
+  const payload = parsed as Record<string, unknown>
+  if (payload.type === 'ping') {
+    return null
+  }
+
+  if (
+    typeof payload.timestamp !== 'string' ||
+    typeof payload.level !== 'string' ||
+    typeof payload.event !== 'string' ||
+    typeof payload.request_id !== 'string' ||
+    typeof payload.message !== 'string'
+  ) {
+    return null
+  }
+
+  const fields = payload.fields
+  const normalizedFields: Record<string, string> = {}
+  if (typeof fields === 'object' && fields !== null) {
+    for (const [key, value] of Object.entries(fields)) {
+      if (typeof value === 'string') {
+        normalizedFields[key] = value
+      }
+    }
+  }
+
+  return {
+    timestamp: payload.timestamp,
+    level: payload.level,
+    event: payload.event,
+    request_id: payload.request_id,
+    fields: normalizedFields,
+    message: payload.message,
+  }
+}
+
+function describeRuntimeEvent(runtimeEvent: WorkflowRuntimeEvent): string {
+  const stepKey = runtimeEvent.fields.step
+  const stepStatus = runtimeEvent.fields.status
+  const stepDetail = runtimeEvent.fields.detail
+  if (stepKey && stepStatus) {
+    const stepLabel = STEP_LABEL_BY_KEY[stepKey] ?? stepKey
+    return `${stepLabel} • ${stepStatus}${stepDetail ? ` • ${stepDetail}` : ''}`
+  }
+  return runtimeEvent.message
+}
+
+function parseCount(value: string | undefined): number {
+  if (!value) {
+    return 0
+  }
+  const parsed = Number.parseInt(value, 10)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
 function App() {
   const [form, setForm] = useState<FormState>(INITIAL_FORM)
   const [formErrors, setFormErrors] = useState<FormErrors>({})
@@ -101,27 +201,10 @@ function App() {
   const [healthMessage, setHealthMessage] = useState<string | null>(null)
   const [requestError, setRequestError] = useState<string | null>(null)
   const [workflowResult, setWorkflowResult] = useState<RunWorkflowResponse | null>(null)
+  const [requestId, setRequestId] = useState<string | null>(null)
+  const [liveLogs, setLiveLogs] = useState<WorkflowRuntimeEvent[]>([])
   const [timelinePhase, setTimelinePhase] = useState<TimelinePhase>('idle')
   const [timelineStepIndex, setTimelineStepIndex] = useState(-1)
-
-  useEffect(() => {
-    if (!isSubmitting) {
-      return
-    }
-
-    const stepTimer = window.setInterval(() => {
-      setTimelineStepIndex((previous) => {
-        if (previous < FLOW_STEPS.length - 1) {
-          return previous + 1
-        }
-        return previous
-      })
-    }, 1200)
-
-    return () => {
-      window.clearInterval(stepTimer)
-    }
-  }, [isSubmitting])
 
   const statusPillText = useMemo(() => {
     if (isSubmitting) {
@@ -181,6 +264,91 @@ function App() {
     ].filter((field) => Boolean(field.value))
   }, [workflowResult])
 
+  const agentExecution = useMemo(() => {
+    const finished = !isSubmitting && (Boolean(workflowResult) || Boolean(requestError))
+
+    const latestChangeSetEvent = [...liveLogs]
+      .reverse()
+      .find((runtimeEvent) => runtimeEvent.event === 'workflow.change_set.generated')
+
+    const backendFilesCount = parseCount(latestChangeSetEvent?.fields.backend_files_count)
+    const frontendFilesCount = parseCount(latestChangeSetEvent?.fields.frontend_files_count)
+    const totalFilesCount = parseCount(latestChangeSetEvent?.fields.files_count)
+    const changeScope = latestChangeSetEvent?.fields.change_scope ?? 'unknown'
+    const hasContractViolation = liveLogs.some(
+      (runtimeEvent) => runtimeEvent.event === 'workflow.integration_contract.failed',
+    )
+
+    const fallbackSummary: AgentExecutionSummary = {
+      lastAction: 'Aguardando execução.',
+      delivered: '-',
+    }
+
+    if (!finished) {
+      return {
+        backend_dev: fallbackSummary,
+        frontend_dev: fallbackSummary,
+        integration_engineer: fallbackSummary,
+        qa_reviewer: fallbackSummary,
+        git_integrator: fallbackSummary,
+      } satisfies Record<string, AgentExecutionSummary>
+    }
+
+    const backendSummary: AgentExecutionSummary = {
+      lastAction: 'Implementou mudanças de backend dentro do escopo permitido.',
+      delivered:
+        backendFilesCount > 0
+          ? `${backendFilesCount} arquivo(s) em backend/.`
+          : 'Nenhum arquivo backend alterado nesta execução.',
+    }
+
+    const frontendSummary: AgentExecutionSummary = {
+      lastAction: 'Implementou ajustes de frontend e integração de cliente.',
+      delivered:
+        frontendFilesCount > 0
+          ? `${frontendFilesCount} arquivo(s) em frontend/.`
+          : 'Nenhum arquivo frontend alterado nesta execução.',
+    }
+
+    const integrationSummary: AgentExecutionSummary = {
+      lastAction: 'Alinhou contrato entre backend e frontend.',
+      delivered: `Contrato validado para escopo ${changeScope}; payload final com ${totalFilesCount} arquivo(s).`,
+    }
+
+    const qaSummary: AgentExecutionSummary = requestError || hasContractViolation
+      ? {
+          lastAction: 'Executou revisão de guardrails e contrato fim a fim.',
+          delivered: `FAIL: ${requestError ?? 'violação do contrato de integração.'}`,
+        }
+      : {
+          lastAction: 'Executou revisão de guardrails e contrato fim a fim.',
+          delivered: 'PASS: fluxo validado sem erro de contrato.',
+        }
+
+    const gitSummary: AgentExecutionSummary = requestError
+      ? {
+          lastAction: 'Tentou consolidar saída final para branch/commit/PR.',
+          delivered: `Sem entrega final por erro: ${requestError}`,
+        }
+      : workflowResult?.status === 'dry_run'
+        ? {
+            lastAction: 'Consolidou resultado final para dry-run.',
+            delivered: `Branch planejada ${workflowResult.branch ?? '-'} e commit "${workflowResult.commit ?? '-'}", sem push/PR real.`,
+          }
+        : {
+            lastAction: 'Consolidou saída final para Git e PR.',
+            delivered: `Branch ${workflowResult?.branch ?? '-'}${workflowResult?.pr_url ? `, PR ${workflowResult.pr_url}` : ', PR não criado.'}`,
+          }
+
+    return {
+      backend_dev: backendSummary,
+      frontend_dev: frontendSummary,
+      integration_engineer: integrationSummary,
+      qa_reviewer: qaSummary,
+      git_integrator: gitSummary,
+    } satisfies Record<string, AgentExecutionSummary>
+  }, [isSubmitting, liveLogs, requestError, workflowResult])
+
   function validateForm(state: FormState): FormErrors {
     const errors: FormErrors = {}
     if (!state.owner.trim()) {
@@ -212,18 +380,57 @@ function App() {
       return
     }
 
+    const generatedRequestId = buildRequestId()
+    setRequestId(generatedRequestId)
+    setLiveLogs([])
+    setWorkflowResult(null)
     setTimelinePhase('running')
     setTimelineStepIndex(0)
     setIsSubmitting(true)
+
+    const stream = openWorkflowStream(generatedRequestId)
+    stream.onmessage = (streamEvent) => {
+      const runtimeEvent = parseRuntimeEvent(streamEvent.data)
+      if (!runtimeEvent) {
+        return
+      }
+
+      setLiveLogs((previous) => [...previous.slice(-79), runtimeEvent])
+
+      if (runtimeEvent.event !== 'workflow.step') {
+        return
+      }
+
+      const stepKey = runtimeEvent.fields.step
+      const stepStatus = runtimeEvent.fields.status
+      if (!stepKey || !stepStatus) {
+        return
+      }
+
+      const stepIndex = STEP_INDEX_BY_KEY[stepKey]
+      if (stepIndex !== undefined) {
+        setTimelineStepIndex((previous) => Math.max(previous, stepIndex))
+      }
+
+      if (stepStatus === 'error') {
+        setTimelinePhase('error')
+        setTimelineStepIndex(FLOW_STEPS.length - 1)
+      }
+    }
+
     try {
-      const response = await runWorkflow({
-        owner: form.owner.trim(),
-        repo: form.repo.trim(),
-        issue_number: Number(form.issueNumber),
-        base_branch: form.baseBranch.trim(),
-        dry_run: form.dryRun,
-      })
-      setWorkflowResult(response)
+      const execution = await runWorkflow(
+        {
+          owner: form.owner.trim(),
+          repo: form.repo.trim(),
+          issue_number: Number(form.issueNumber),
+          base_branch: form.baseBranch.trim(),
+          dry_run: form.dryRun,
+        },
+        generatedRequestId,
+      )
+      setRequestId(execution.requestId)
+      setWorkflowResult(execution.response)
       setTimelinePhase('success')
       setTimelineStepIndex(FLOW_STEPS.length - 1)
     } catch (error) {
@@ -233,6 +440,9 @@ function App() {
       setTimelineStepIndex(FLOW_STEPS.length - 1)
     } finally {
       setIsSubmitting(false)
+      window.setTimeout(() => {
+        stream.close()
+      }, 750)
     }
   }
 
@@ -283,7 +493,7 @@ function App() {
 
   const timelineHint = useMemo(() => {
     if (timelinePhase === 'running') {
-      return 'Demonstração em andamento: etapas avançando automaticamente.'
+      return 'Progresso em tempo real baseado nos eventos do backend.'
     }
     if (timelinePhase === 'success') {
       return 'Fluxo finalizado com sucesso.'
@@ -422,6 +632,30 @@ function App() {
               </li>
             ))}
           </ol>
+
+          <div className="live-observability">
+            <p className="live-observability-title">Observabilidade ao vivo</p>
+            <p className="request-id-line">
+              X-Request-ID: <code>{requestId ?? '-'}</code>
+            </p>
+
+            <ul className="live-log-list">
+              {liveLogs.length === 0 ? (
+                <li className="live-log-empty">Sem logs recebidos ainda.</li>
+              ) : (
+                [...liveLogs]
+                  .reverse()
+                  .map((runtimeEvent, index) => (
+                    <li key={`${runtimeEvent.timestamp}-${index}`} className="live-log-item">
+                      <span className="live-log-time">
+                        {new Date(runtimeEvent.timestamp).toLocaleTimeString()}
+                      </span>
+                      <span className="live-log-text">{describeRuntimeEvent(runtimeEvent)}</span>
+                    </li>
+                  ))
+              )}
+            </ul>
+          </div>
         </section>
 
         <section className="panel">
@@ -494,6 +728,14 @@ function App() {
                 </p>
                 <p>
                   <strong>Limite:</strong> {agent.scopeLimit}
+                </p>
+                <p className="agent-runtime">
+                  <strong>Ultima execução:</strong>{' '}
+                  {agentExecution[agent.id as keyof typeof agentExecution].lastAction}
+                </p>
+                <p className="agent-runtime">
+                  <strong>Entregou:</strong>{' '}
+                  {agentExecution[agent.id as keyof typeof agentExecution].delivered}
                 </p>
               </article>
             ))}

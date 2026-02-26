@@ -1,5 +1,6 @@
 import type {
   HealthCheckResponse,
+  RunWorkflowExecution,
   RunWorkflowErrorResponse,
   RunWorkflowRequest,
   RunWorkflowResponse,
@@ -7,6 +8,7 @@ import type {
 
 const DEFAULT_API_BASE_URL = 'http://localhost:8000'
 const WORKFLOW_RUN_PATH = '/workflow/run'
+const WORKFLOW_STREAM_PATH = '/workflow/stream'
 const HEALTH_PATH = '/health'
 
 const API_BASE_URL =
@@ -32,12 +34,24 @@ export async function checkHealth(): Promise<HealthCheckResponse> {
   return (await response.json()) as HealthCheckResponse
 }
 
-export async function runWorkflow(payload: RunWorkflowRequest): Promise<RunWorkflowResponse> {
+export function openWorkflowStream(requestId: string): EventSource {
+  return new EventSource(`${API_BASE_URL}${WORKFLOW_STREAM_PATH}/${encodeURIComponent(requestId)}`)
+}
+
+export async function runWorkflow(
+  payload: RunWorkflowRequest,
+  requestId?: string,
+): Promise<RunWorkflowExecution> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  }
+  if (requestId) {
+    headers['X-Request-ID'] = requestId
+  }
+
   const response = await fetch(`${API_BASE_URL}${WORKFLOW_RUN_PATH}`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers,
     body: JSON.stringify(payload),
   })
 
@@ -54,5 +68,8 @@ export async function runWorkflow(payload: RunWorkflowRequest): Promise<RunWorkf
     throw new Error(errorDetail)
   }
 
-  return (await response.json()) as RunWorkflowResponse
+  return {
+    response: (await response.json()) as RunWorkflowResponse,
+    requestId: response.headers.get('X-Request-ID') ?? requestId ?? null,
+  }
 }

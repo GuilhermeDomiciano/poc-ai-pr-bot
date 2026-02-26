@@ -35,12 +35,15 @@ A proof-of-concept bot that reads a GitHub Issue, runs a multi-agent CrewAI work
 - Frontend base URL env: `VITE_API_BASE_URL`
 - Fallback base URL: `http://localhost:8000`
 - Endpoint path: `/workflow/run`
+- Live observability stream: `/workflow/stream/{request_id}` (SSE)
 - Request shape consumed by frontend:
   - `{owner, repo, issue_number, base_branch?, dry_run?}`
 - Success response:
   - `{status, message, branch?, commit?, pr_title?, pr_url?}`
 - Error response:
   - `{detail}`
+- Response header:
+  - `X-Request-ID`
 
 ### Guardrails
 
@@ -55,7 +58,7 @@ A proof-of-concept bot that reads a GitHub Issue, runs a multi-agent CrewAI work
 - `domain/models.py`: domain model (`ChangeSet`).
 - `domain/payload_parser.py`: JSON extraction + integration contract validation.
 - `infrastructure/ai/`: Crew flow and runner.
-- `infrastructure/http/`: API adapter (`/health`, `/workflow/run`).
+- `infrastructure/http/`: API adapter (`/health`, `/workflow/run`, `/workflow/stream/{request_id}`).
 - `infrastructure/github/`: GitHub API client and gateways.
 - `infrastructure/repo/`: git/repo operations and file writer.
 - `infrastructure/observability/`: structured logging + change-scope observer.

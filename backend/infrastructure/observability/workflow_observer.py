@@ -21,14 +21,23 @@ def classify_change_scope(files_map: dict[str, str]) -> str:
     return "unknown"
 
 
+def _count_files_by_scope(files_map: dict[str, str]) -> tuple[int, int]:
+    backend_files_count = sum(1 for path in files_map if path.startswith("backend/"))
+    frontend_files_count = sum(1 for path in files_map if path.startswith("frontend/"))
+    return backend_files_count, frontend_files_count
+
+
 def observe_generated_change_set(change_set: ChangeSet) -> None:
     change_scope = classify_change_scope(change_set.files)
+    backend_files_count, frontend_files_count = _count_files_by_scope(change_set.files)
     log_event(
         logger,
         logging.INFO,
         "workflow.change_set.generated",
         change_scope=change_scope,
         files_count=len(change_set.files),
+        backend_files_count=backend_files_count,
+        frontend_files_count=frontend_files_count,
     )
 
 
@@ -42,4 +51,16 @@ def log_contract_violation(error_message: str) -> None:
         logging.ERROR,
         "workflow.integration_contract.failed",
         error=error_message,
+    )
+
+
+def observe_workflow_step(step: str, status: str, detail: str | None = None) -> None:
+    level = logging.ERROR if status == "error" else logging.INFO
+    log_event(
+        logger,
+        level,
+        "workflow.step",
+        step=step,
+        status=status,
+        detail=detail,
     )

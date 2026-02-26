@@ -1,8 +1,10 @@
 import logging
 import re
+from datetime import datetime, timezone
 from typing import Any, Iterable
 
 from infrastructure.observability.context import get_request_id
+from infrastructure.observability.event_stream import publish_runtime_event
 
 
 _TOKEN_PATTERNS = (
@@ -34,7 +36,7 @@ def redact_secrets(text: str) -> str:
         else:
             redacted = pattern.sub("[REDACTED]", redacted)
     return redacted
-    
+
 
 class RequestIdFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
@@ -90,4 +92,22 @@ def structured_message(event: str, **fields: Any) -> str:
 
 
 def log_event(logger: logging.Logger, level: int, event: str, **fields: Any) -> None:
-    logger.log(level, structured_message(event, **fields))
+    request_id = get_request_id()
+    normalized_fields = {
+        key: _format_field_value(value)
+        for key, value in fields.items()
+        if value is not None
+    }
+    message = structured_message(event, **fields)
+
+    logger.log(level, message)
+    publish_runtime_event(
+        {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "level": logging.getLevelName(level).lower(),
+            "event": event,
+            "request_id": request_id,
+            "fields": normalized_fields,
+            "message": message,
+        }
+    )

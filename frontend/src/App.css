@@ -257,6 +257,78 @@
   font-size: 0.86rem;
 }
 
+.live-observability {
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px;
+  background: #ffffffd9;
+}
+
+.live-observability-title {
+  margin: 0 0 6px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #335069;
+}
+
+.request-id-line {
+  margin: 0 0 8px;
+  font-size: 0.82rem;
+  color: var(--ink-2);
+}
+
+.request-id-line code {
+  font-family: 'Fira Code', 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  background: #eef2f7;
+  padding: 2px 6px;
+  border-radius: 7px;
+  color: #102a43;
+}
+
+.live-log-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 7px;
+  max-height: 230px;
+  overflow: auto;
+}
+
+.live-log-item {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 8px;
+  background: #fff;
+  display: grid;
+  gap: 3px;
+}
+
+.live-log-time {
+  font-size: 0.72rem;
+  color: #61778d;
+  font-weight: 700;
+}
+
+.live-log-text {
+  font-size: 0.8rem;
+  color: var(--ink-1);
+  line-height: 1.35;
+}
+
+.live-log-empty {
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 0.8rem;
+  color: var(--ink-2);
+  background: #fff;
+}
+
 @keyframes timeline-pulse {
   0% {
     transform: scale(1);
@@ -436,6 +508,12 @@
 
 .agent-card strong {
   color: var(--ink-1);
+}
+
+.agent-runtime {
+  margin-top: 8px !important;
+  padding-top: 8px;
+  border-top: 1px dashed #d8e2ec;
 }
 
 @media (max-width: 1080px) {

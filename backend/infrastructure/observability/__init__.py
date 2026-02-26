@@ -4,6 +4,7 @@ from infrastructure.observability.workflow_observer import (
     is_contract_violation_error,
     log_contract_violation,
     observe_generated_change_set,
+    observe_workflow_step,
 )
 
 __all__ = [
@@ -11,6 +12,7 @@ __all__ = [
     "log_event",
     "classify_change_scope",
     "observe_generated_change_set",
+    "observe_workflow_step",
     "is_contract_violation_error",
     "log_contract_violation",
 ]

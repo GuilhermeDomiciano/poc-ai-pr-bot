@@ -15,10 +15,24 @@ export type RunWorkflowResponse = {
   pr_url?: string | null
 }
 
+export type RunWorkflowExecution = {
+  response: RunWorkflowResponse
+  requestId: string | null
+}
+
 export type RunWorkflowErrorResponse = {
   detail: string
 }
 
 export type HealthCheckResponse = {
   status: string
+}
+
+export type WorkflowRuntimeEvent = {
+  timestamp: string
+  level: string
+  event: string
+  request_id: string
+  fields: Record<string, string>
+  message: string
 }

@@ -18,6 +18,10 @@ def _noop_observe_change_set(_: ChangeSet) -> None:
     return None
 
 
+def _noop_observe_step(_: str, __: str, ___: str | None = None) -> None:
+    return None
+
+
 @dataclass(frozen=True)
 class IssueFlowConfig:
     issue_number: int
@@ -41,6 +45,7 @@ class IssueFlowDependencies:
     publish_changes: Callable[[Path, str, str], None]
     remote_branch_exists: Callable[[str, Path], bool]
     observe_change_set: Callable[[ChangeSet], None] = _noop_observe_change_set
+    observe_step: Callable[[str, str, str | None], None] = _noop_observe_step
 
 
 @dataclass(frozen=True)
@@ -70,14 +75,20 @@ def _prepare_repository(config: IssueFlowConfig, dependencies: IssueFlowDependen
     dependencies.git_setup(config.repository_directory)
 
 
-def _build_change_set(
+def _generate_crew_output(
     issue_title: str,
     issue_body: str,
     config: IssueFlowConfig,
     dependencies: IssueFlowDependencies,
-) -> ChangeSet:
+) -> str:
     repository_tree_summary = dependencies.repo_tree_summary(config.repository_directory)
-    crew_output_text = dependencies.run_crew(issue_title, issue_body, repository_tree_summary)
+    return dependencies.run_crew(issue_title, issue_body, repository_tree_summary)
+
+
+def _parse_change_set(
+    crew_output_text: str,
+    dependencies: IssueFlowDependencies,
+) -> ChangeSet:
     change_set = dependencies.parse_payload(crew_output_text)
     dependencies.observe_change_set(change_set)
     return change_set
@@ -151,16 +162,45 @@ def run_issue_flow(
     raise_on_error: bool = True,
 ) -> IssueFlowResult:
     try:
+        dependencies.observe_step("load_issue", "start")
         issue_title, issue_body = _load_issue_context(config, dependencies)
+        dependencies.observe_step("load_issue", "success")
+
+        dependencies.observe_step("prepare_repo", "start")
         _prepare_repository(config, dependencies)
-        change_set = _build_change_set(issue_title, issue_body, config, dependencies)
+        dependencies.observe_step("prepare_repo", "success")
+
+        dependencies.observe_step("run_crew", "start")
+        crew_output_text = _generate_crew_output(issue_title, issue_body, config, dependencies)
+        dependencies.observe_step("run_crew", "success")
+
+        dependencies.observe_step("validate_payload", "start")
+        change_set = _parse_change_set(crew_output_text, dependencies)
+        dependencies.observe_step(
+            "validate_payload",
+            "success",
+            detail=f"files_count={len(change_set.files)}",
+        )
 
         if config.dry_run:
+            dependencies.observe_step(
+                "publish_branch",
+                "success",
+                detail="skipped (dry_run=true)",
+            )
+            dependencies.observe_step("finalize", "success", detail="dry_run completed")
             return _build_dry_run_result(change_set)
 
+        dependencies.observe_step("publish_branch", "start")
         _publish_repository_changes(config, dependencies, change_set)
-        return _build_pr_or_branch_result(config, dependencies, change_set)
+        dependencies.observe_step("publish_branch", "success", detail=change_set.branch)
+
+        dependencies.observe_step("finalize", "start")
+        result = _build_pr_or_branch_result(config, dependencies, change_set)
+        dependencies.observe_step("finalize", "success", detail=result.message)
+        return result
     except Exception as error:
+        dependencies.observe_step("finalize", "error", detail=str(error))
         if raise_on_error:
             raise
         return IssueFlowResult(
