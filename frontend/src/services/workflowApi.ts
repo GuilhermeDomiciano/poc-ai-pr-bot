@@ -42,7 +42,7 @@ export async function runWorkflow(payload: RunWorkflowRequest): Promise<RunWorkf
   })
 
   if (!response.ok) {
-    let errorDetail = 'Internal error while executing workflow'
+    let errorDetail = 'Falha ao executar workflow. A API nao retornou detalhes.'
     try {
       const errorPayload = (await response.json()) as unknown
       if (isRunWorkflowErrorResponse(errorPayload)) {

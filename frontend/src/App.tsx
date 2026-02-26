@@ -1,4 +1,4 @@
-import { type FormEvent, useMemo, useState } from 'react'
+import { type FormEvent, useEffect, useMemo, useState } from 'react'
 import './App.css'
 import { checkHealth, getApiBaseUrl, runWorkflow } from './services/workflowApi'
 import type { RunWorkflowResponse } from './types/workflow'
@@ -30,6 +30,34 @@ const FLOW_STEPS = [
   },
 ]
 
+const AGENT_CARDS = [
+  {
+    name: 'Backend Dev',
+    responsibility: 'Implementa lógica de backend com alterações mínimas e contratos estáveis.',
+    scopeLimit: 'Pode editar apenas arquivos em backend/.',
+  },
+  {
+    name: 'Frontend Dev',
+    responsibility: 'Implementa UI e integração cliente/API com tipagem e estados de feedback.',
+    scopeLimit: 'Pode editar apenas arquivos em frontend/.',
+  },
+  {
+    name: 'Integration Engineer',
+    responsibility: 'Resolve incompatibilidades entre frontend e backend e garante contrato fim a fim.',
+    scopeLimit: 'Pode editar backend/ e frontend/ quando necessário para integração.',
+  },
+  {
+    name: 'QA Reviewer',
+    responsibility: 'Valida qualidade E2E, segurança e consistência do contrato final.',
+    scopeLimit: 'Não implementa feature nova; aprova ou bloqueia com critérios objetivos.',
+  },
+  {
+    name: 'Git Integrator',
+    responsibility: 'Consolida saída final em JSON com arquivos, branch, commit e dados de PR.',
+    scopeLimit: 'Entrega estritamente JSON válido e caminhos sob backend/ ou frontend/.',
+  },
+]
+
 type FormState = {
   owner: string
   repo: string
@@ -39,6 +67,7 @@ type FormState = {
 }
 
 type FormErrors = Partial<Record<keyof Omit<FormState, 'dryRun'>, string>>
+type TimelinePhase = 'idle' | 'running' | 'success' | 'error'
 
 const INITIAL_FORM: FormState = {
   owner: '',
@@ -48,11 +77,20 @@ const INITIAL_FORM: FormState = {
   dryRun: false,
 }
 
-function getErrorMessage(error: unknown): string {
+const WORKFLOW_ERROR_FALLBACK =
+  'Nao foi possivel executar o workflow. Verifique a API e tente novamente.'
+
+function getErrorDetailMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim()) {
-    return error.message
+    const message = error.message.trim()
+    const lowerMessage = message.toLowerCase()
+
+    if (lowerMessage.includes('networkerror') || lowerMessage.includes('failed to fetch')) {
+      return 'Falha de rede ao chamar a API. Verifique backend ativo, URL e CORS.'
+    }
+    return message
   }
-  return 'Unexpected request error'
+  return WORKFLOW_ERROR_FALLBACK
 }
 
 function App() {
@@ -63,6 +101,27 @@ function App() {
   const [healthMessage, setHealthMessage] = useState<string | null>(null)
   const [requestError, setRequestError] = useState<string | null>(null)
   const [workflowResult, setWorkflowResult] = useState<RunWorkflowResponse | null>(null)
+  const [timelinePhase, setTimelinePhase] = useState<TimelinePhase>('idle')
+  const [timelineStepIndex, setTimelineStepIndex] = useState(-1)
+
+  useEffect(() => {
+    if (!isSubmitting) {
+      return
+    }
+
+    const stepTimer = window.setInterval(() => {
+      setTimelineStepIndex((previous) => {
+        if (previous < FLOW_STEPS.length - 1) {
+          return previous + 1
+        }
+        return previous
+      })
+    }, 1200)
+
+    return () => {
+      window.clearInterval(stepTimer)
+    }
+  }, [isSubmitting])
 
   const statusPillText = useMemo(() => {
     if (isSubmitting) {
@@ -84,11 +143,43 @@ function App() {
     if (requestError) {
       return 'status-pill status-pill--error'
     }
-    if (workflowResult?.status === 'success' || workflowResult?.status === 'dry_run') {
+    if (workflowResult?.status === 'dry_run') {
+      return 'status-pill status-pill--dryrun'
+    }
+    if (workflowResult?.status === 'success') {
       return 'status-pill status-pill--success'
     }
     return 'status-pill'
   }, [isSubmitting, requestError, workflowResult])
+
+  const resultTone = useMemo(() => {
+    if (requestError) {
+      return 'error'
+    }
+    if (workflowResult?.status === 'dry_run') {
+      return 'dryrun'
+    }
+    if (workflowResult?.status === 'success') {
+      return 'success'
+    }
+    if (isSubmitting) {
+      return 'running'
+    }
+    return 'idle'
+  }, [isSubmitting, requestError, workflowResult])
+
+  const resultFields = useMemo(() => {
+    if (!workflowResult) {
+      return []
+    }
+
+    return [
+      { label: 'Branch', value: workflowResult.branch, isLink: false },
+      { label: 'Commit', value: workflowResult.commit, isLink: false },
+      { label: 'PR Title', value: workflowResult.pr_title, isLink: false },
+      { label: 'PR URL', value: workflowResult.pr_url, isLink: true },
+    ].filter((field) => Boolean(field.value))
+  }, [workflowResult])
 
   function validateForm(state: FormState): FormErrors {
     const errors: FormErrors = {}
@@ -121,6 +212,8 @@ function App() {
       return
     }
 
+    setTimelinePhase('running')
+    setTimelineStepIndex(0)
     setIsSubmitting(true)
     try {
       const response = await runWorkflow({
@@ -131,9 +224,13 @@ function App() {
         dry_run: form.dryRun,
       })
       setWorkflowResult(response)
+      setTimelinePhase('success')
+      setTimelineStepIndex(FLOW_STEPS.length - 1)
     } catch (error) {
       setWorkflowResult(null)
-      setRequestError(getErrorMessage(error))
+      setRequestError(getErrorDetailMessage(error))
+      setTimelinePhase('error')
+      setTimelineStepIndex(FLOW_STEPS.length - 1)
     } finally {
       setIsSubmitting(false)
     }
@@ -148,11 +245,54 @@ function App() {
       const health = await checkHealth()
       setHealthMessage(`API health: ${health.status}`)
     } catch (error) {
-      setHealthMessage(`API health failed: ${getErrorMessage(error)}`)
+      setHealthMessage(`API health failed: ${getErrorDetailMessage(error)}`)
     } finally {
       setIsCheckingHealth(false)
     }
   }
+
+  function getTimelineItemClass(index: number): string {
+    const lastStepIndex = FLOW_STEPS.length - 1
+
+    if (timelinePhase === 'idle') {
+      return 'timeline-item timeline-item--pending'
+    }
+
+    if (timelinePhase === 'running') {
+      if (index < timelineStepIndex) {
+        return 'timeline-item timeline-item--done'
+      }
+      if (index === timelineStepIndex) {
+        return 'timeline-item timeline-item--active'
+      }
+      return 'timeline-item timeline-item--pending'
+    }
+
+    if (timelinePhase === 'success') {
+      if (index === lastStepIndex) {
+        return 'timeline-item timeline-item--success'
+      }
+      return 'timeline-item timeline-item--done'
+    }
+
+    if (index === lastStepIndex) {
+      return 'timeline-item timeline-item--error'
+    }
+    return 'timeline-item timeline-item--done'
+  }
+
+  const timelineHint = useMemo(() => {
+    if (timelinePhase === 'running') {
+      return 'Demonstração em andamento: etapas avançando automaticamente.'
+    }
+    if (timelinePhase === 'success') {
+      return 'Fluxo finalizado com sucesso.'
+    }
+    if (timelinePhase === 'error') {
+      return 'Fluxo finalizado com erro.'
+    }
+    return 'O backend executa estas etapas em sequência.'
+  }, [timelinePhase])
 
   return (
     <div className="app-shell">
@@ -264,17 +404,16 @@ function App() {
             </div>
 
             {healthMessage ? <p className="form-helper">{healthMessage}</p> : null}
-            {requestError ? <p className="field-error">{requestError}</p> : null}
           </form>
         </section>
 
         <section className="panel">
           <h2>Timeline de Etapas</h2>
-          <p className="panel-caption">O backend executa estas etapas em sequência.</p>
+          <p className="panel-caption">{timelineHint}</p>
 
           <ol className="timeline">
             {FLOW_STEPS.map((step, index) => (
-              <li key={step.title} className={index === 0 ? 'timeline-item current' : 'timeline-item'}>
+              <li key={step.title} className={getTimelineItemClass(index)}>
                 <div className="timeline-badge">{index + 1}</div>
                 <div>
                   <h3>{step.title}</h3>
@@ -289,7 +428,7 @@ function App() {
           <h2>Resultado Final</h2>
           <p className="panel-caption">Resumo consolidado da execução para apresentação.</p>
 
-          <div className="result-status">
+          <div className={`result-status result-status--${resultTone}`}>
             <span className={statusPillClass}>{statusPillText}</span>
             <p>
               {requestError ??
@@ -298,34 +437,67 @@ function App() {
             </p>
           </div>
 
-          <dl className="result-grid">
-            <div>
-              <dt>Status</dt>
-              <dd>{workflowResult?.status ?? (requestError ? 'error' : 'pending')}</dd>
-            </div>
-            <div>
-              <dt>Mensagem</dt>
-              <dd>
-                {requestError ?? workflowResult?.message ?? 'Execução ainda não iniciada.'}
-              </dd>
-            </div>
-            <div>
-              <dt>Branch</dt>
-              <dd>{workflowResult?.branch || '-'}</dd>
-            </div>
-            <div>
-              <dt>Commit</dt>
-              <dd>{workflowResult?.commit || '-'}</dd>
-            </div>
-            <div>
-              <dt>PR Title</dt>
-              <dd>{workflowResult?.pr_title || '-'}</dd>
-            </div>
-            <div>
-              <dt>PR URL</dt>
-              <dd>{workflowResult?.pr_url || '-'}</dd>
-            </div>
-          </dl>
+          {workflowResult?.status === 'dry_run' ? (
+            <p className="result-note result-note--dryrun">
+              Dry-run confirmado: nenhum push de branch e nenhum PR real foram criados.
+            </p>
+          ) : null}
+
+          {requestError ? (
+            <p className="result-note result-note--error">
+              <strong>Error detail:</strong> {requestError || WORKFLOW_ERROR_FALLBACK}
+            </p>
+          ) : null}
+
+          {resultFields.length > 0 ? (
+            <dl className="result-grid">
+              <div>
+                <dt>Status</dt>
+                <dd>{workflowResult?.status ?? 'pending'}</dd>
+              </div>
+              <div>
+                <dt>Mensagem</dt>
+                <dd>{workflowResult?.message ?? '-'}</dd>
+              </div>
+              {resultFields.map((field) => (
+                <div key={field.label}>
+                  <dt>{field.label}</dt>
+                  <dd>
+                    {field.isLink ? (
+                      <a href={field.value ?? '#'} target="_blank" rel="noreferrer">
+                        {field.value}
+                      </a>
+                    ) : (
+                      field.value
+                    )}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          ) : (
+            <p className="result-empty">Sem artefatos ainda. Execute o workflow para gerar branch, commit e PR.</p>
+          )}
+        </section>
+
+        <section className="panel panel--wide">
+          <h2>Como Funciona por Dentro</h2>
+          <p className="panel-caption">
+            Cada agente tem papel claro, com responsabilidade definida e limite de atuação.
+          </p>
+
+          <div className="agent-grid">
+            {AGENT_CARDS.map((agent) => (
+              <article key={agent.name} className="agent-card">
+                <h3>{agent.name}</h3>
+                <p>
+                  <strong>Responsabilidade:</strong> {agent.responsibility}
+                </p>
+                <p>
+                  <strong>Limite:</strong> {agent.scopeLimit}
+                </p>
+              </article>
+            ))}
+          </div>
         </section>
       </main>
     </div>
