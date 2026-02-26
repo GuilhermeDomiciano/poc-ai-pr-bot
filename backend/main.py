@@ -24,6 +24,11 @@ from infrastructure.observability.logging_utils import (
     log_event,
     register_sensitive_values,
 )
+from infrastructure.observability.workflow_observer import (
+    is_contract_violation_error,
+    log_contract_violation,
+    observe_generated_change_set,
+)
 
 
 load_dotenv()
@@ -77,9 +82,17 @@ def main() -> None:
         apply_files=apply_files,
         publish_changes=publish_changes,
         remote_branch_exists=remote_branch_exists,
+        observe_change_set=observe_generated_change_set,
     )
+    try:
+        result = run_issue_flow(flow_config, flow_dependencies)
+    except Exception as error:
+        error_message = str(error)
+        if is_contract_violation_error(error_message):
+            log_contract_violation(error_message)
+        log_event(logger, logging.ERROR, "cli.workflow.failed", error=error_message)
+        raise
 
-    result = run_issue_flow(flow_config, flow_dependencies)
     log_event(logger, logging.INFO, "cli.workflow.end", status=result.status, message=result.message)
 
 if __name__ == "__main__":

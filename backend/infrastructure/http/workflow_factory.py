@@ -9,6 +9,7 @@ from infrastructure.github.github_client import GitHubClient
 from infrastructure.http.mappers import to_issue_flow_config
 from infrastructure.http.schemas import RunWorkflowRequest
 from infrastructure.observability.logging_utils import register_sensitive_values
+from infrastructure.observability.workflow_observer import observe_generated_change_set
 from infrastructure.repo.file_writer import apply_files
 from infrastructure.repo.operations import (
     clone_repo,
@@ -73,4 +74,5 @@ def build_issue_flow_dependencies(payload: RunWorkflowRequest) -> IssueFlowDepen
         apply_files=apply_files,
         publish_changes=publish_changes,
         remote_branch_exists=remote_branch_exists,
+        observe_change_set=observe_generated_change_set,
     )

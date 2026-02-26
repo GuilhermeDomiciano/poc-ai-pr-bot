@@ -14,6 +14,10 @@ class PullRequestData(TypedDict):
     html_url: str
 
 
+def _noop_observe_change_set(_: ChangeSet) -> None:
+    return None
+
+
 @dataclass(frozen=True)
 class IssueFlowConfig:
     issue_number: int
@@ -36,6 +40,7 @@ class IssueFlowDependencies:
     apply_files: Callable[[Path, dict[str, str]], None]
     publish_changes: Callable[[Path, str, str], None]
     remote_branch_exists: Callable[[str, Path], bool]
+    observe_change_set: Callable[[ChangeSet], None] = _noop_observe_change_set
 
 
 @dataclass(frozen=True)
@@ -73,7 +78,9 @@ def _build_change_set(
 ) -> ChangeSet:
     repository_tree_summary = dependencies.repo_tree_summary(config.repository_directory)
     crew_output_text = dependencies.run_crew(issue_title, issue_body, repository_tree_summary)
-    return dependencies.parse_payload(crew_output_text)
+    change_set = dependencies.parse_payload(crew_output_text)
+    dependencies.observe_change_set(change_set)
+    return change_set
 
 
 def _build_dry_run_result(change_set: ChangeSet) -> IssueFlowResult:
