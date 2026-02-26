@@ -1,11 +1,20 @@
+import os
+
 from crewai import Agent, Crew, Task
 
 
+def _resolve_agent_model() -> str:
+    return os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+
+
 def build_crew(issue_title: str, issue_body: str, repo_tree: str) -> Crew:
+    agent_model = _resolve_agent_model()
+
     backend_dev = Agent(
         role="Backend Dev",
         goal="Implement backend changes with minimal, safe edits and stable API contracts.",
         backstory="You are strict about service boundaries and API compatibility.",
+        llm=agent_model,
         verbose=True,
     )
 
@@ -13,6 +22,7 @@ def build_crew(issue_title: str, issue_body: str, repo_tree: str) -> Crew:
         role="Frontend Dev",
         goal="Implement UI and client integration with typed, maintainable code.",
         backstory="You are strict about user feedback states, request handling, and DX.",
+        llm=agent_model,
         verbose=True,
     )
 
@@ -20,6 +30,7 @@ def build_crew(issue_title: str, issue_body: str, repo_tree: str) -> Crew:
         role="Integration Engineer",
         goal="Guarantee frontend/backend contract alignment and integration safety.",
         backstory="You focus on API contract, error handling, CORS, and env wiring.",
+        llm=agent_model,
         verbose=True,
     )
 
@@ -27,6 +38,7 @@ def build_crew(issue_title: str, issue_body: str, repo_tree: str) -> Crew:
         role="QA Reviewer",
         goal="Validate the fullstack solution and reject unsafe or incomplete outputs.",
         backstory="You apply strict E2E checks and enforce delivery guardrails.",
+        llm=agent_model,
         verbose=True,
     )
 
@@ -34,6 +46,7 @@ def build_crew(issue_title: str, issue_body: str, repo_tree: str) -> Crew:
         role="Git Integrator",
         goal="Produce a single valid JSON output for repository changes and PR metadata.",
         backstory="You enforce strict output formatting and complete file coverage.",
+        llm=agent_model,
         verbose=True,
     )
 

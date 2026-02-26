@@ -89,10 +89,13 @@ GH_REPO=your-repo
 ISSUE_NUMBER=1
 
 # Optional
+OPENAI_MODEL=gpt-4o-mini
 GH_BASE_BRANCH=main
 GIT_AUTHOR_NAME=AI Bot
 GIT_AUTHOR_EMAIL=ai-bot@example.com
 ```
+
+`OPENAI_MODEL` define o modelo usado pelos 5 agentes CrewAI. O padrão é `gpt-4o-mini` para reduzir custo de tokens.
 
 For HTTP mode (`POST /workflow/run`), `owner`, `repo`, and `issue_number` come from request payload; `OPENAI_API_KEY` and `GITHUB_TOKEN` remain required in env.
 
