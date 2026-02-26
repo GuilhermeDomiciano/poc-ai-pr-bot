@@ -3,3 +3,4 @@ frontend/dist
 backend/.venv
 backend/__pycache__
 AGENTS.md
+implementacao.md

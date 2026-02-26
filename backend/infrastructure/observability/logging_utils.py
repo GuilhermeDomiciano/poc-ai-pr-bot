@@ -29,9 +29,12 @@ def redact_secrets(text: str) -> str:
     for value in _sensitive_values():
         redacted = redacted.replace(value, "[REDACTED]")
     for pattern in _TOKEN_PATTERNS:
-        redacted = pattern.sub(r"\1[REDACTED]", redacted)
+        if pattern.groups > 0:
+            redacted = pattern.sub(r"\1[REDACTED]", redacted)
+        else:
+            redacted = pattern.sub("[REDACTED]", redacted)
     return redacted
-
+    
 
 class RequestIdFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
