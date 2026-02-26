@@ -18,3 +18,7 @@ export type RunWorkflowResponse = {
 export type RunWorkflowErrorResponse = {
   detail: string
 }
+
+export type HealthCheckResponse = {
+  status: string
+}

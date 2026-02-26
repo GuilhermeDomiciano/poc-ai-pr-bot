@@ -1,9 +1,11 @@
 import logging
+import os
 import time
 import uuid
 from collections.abc import Awaitable, Callable
 
 from fastapi import FastAPI, Request, status
+from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import Response
 
 from infrastructure.http.errors import to_http_exception
@@ -16,6 +18,24 @@ from infrastructure.observability.logging_utils import configure_logging, log_ev
 configure_logging()
 logger = logging.getLogger(__name__)
 app = FastAPI(title="POC AI PR Bot API")
+
+
+def _resolve_cors_origins() -> list[str]:
+    raw_origins = os.getenv(
+        "CORS_ALLOW_ORIGINS",
+        "http://localhost:5173,http://127.0.0.1:5173",
+    )
+    return [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_resolve_cors_origins(),
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["X-Request-ID"],
+)
 
 
 @app.middleware("http")

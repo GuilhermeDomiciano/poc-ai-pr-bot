@@ -90,12 +90,14 @@ ISSUE_NUMBER=1
 
 # Optional
 OPENAI_MODEL=gpt-4o-mini
+CORS_ALLOW_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 GH_BASE_BRANCH=main
 GIT_AUTHOR_NAME=AI Bot
 GIT_AUTHOR_EMAIL=ai-bot@example.com
 ```
 
 `OPENAI_MODEL` define o modelo usado pelos 5 agentes CrewAI. O padrão é `gpt-4o-mini` para reduzir custo de tokens.
+`CORS_ALLOW_ORIGINS` define as origens permitidas no HTTP mode (lista separada por vírgula).
 
 For HTTP mode (`POST /workflow/run`), `owner`, `repo`, and `issue_number` come from request payload; `OPENAI_API_KEY` and `GITHUB_TOKEN` remain required in env.
 
