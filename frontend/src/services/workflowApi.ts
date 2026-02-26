@@ -38,8 +38,8 @@ export async function runWorkflow(payload: RunWorkflowRequest): Promise<RunWorkf
       if (isRunWorkflowErrorResponse(errorPayload)) {
         errorDetail = errorPayload.detail
       }
-    } catch {
-      
+    } catch (error) {
+      void error
     }
     throw new Error(errorDetail)
   }
