@@ -2,8 +2,8 @@ import os
 from functools import partial
 from pathlib import Path
 
-from application.run_issue_flow import IssueFlowConfig, IssueFlowDependencies
-from domain.payload_parser import parse_payload
+from application.issue_flow import IssueFlowConfig, IssueFlowDependencies
+from domain.payload import parse_payload
 from infrastructure.ai.crew_runner import run_crew
 from infrastructure.github.github_client import GitHubClient
 from infrastructure.http.mappers import to_issue_flow_config

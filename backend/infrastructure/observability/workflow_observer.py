@@ -1,7 +1,7 @@
 import logging
 
 from domain.models import ChangeSet
-from domain.payload_parser import CONTRACT_ERROR_PREFIX
+from domain.payload import CONTRACT_ERROR_PREFIX
 from infrastructure.observability.logging_utils import log_event
 
 

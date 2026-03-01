@@ -1,16 +1,11 @@
-"""Backward-compatible exports for issue flow application layer.
-
-Prefer importing from `application.issue_flow` in new code.
-"""
-
-from application.issue_flow import (
+from application.issue_flow.contracts import (
     IssueData,
     IssueFlowConfig,
     IssueFlowDependencies,
     IssueFlowResult,
     PullRequestData,
-    run_issue_flow,
 )
+from application.issue_flow.use_case import run_issue_flow
 
 __all__ = [
     "IssueData",

@@ -37,7 +37,7 @@ def redact_secrets(text: str) -> str:
             redacted = pattern.sub("[REDACTED]", redacted)
     return redacted
 
-
+# garante que todo LogRecord criado terá um campo request_id
 class RequestIdFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         record.request_id = get_request_id()

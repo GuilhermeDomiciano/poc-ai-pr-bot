@@ -1,6 +1,6 @@
 import logging
 
-from application.run_issue_flow import run_issue_flow
+from application.issue_flow import run_issue_flow
 from infrastructure.http.errors import WorkflowExecutionError
 from infrastructure.http.workflow_factory import (
     build_issue_flow_config_from_request,

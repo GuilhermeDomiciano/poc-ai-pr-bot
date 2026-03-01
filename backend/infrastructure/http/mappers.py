@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from application.run_issue_flow import IssueFlowConfig, IssueFlowResult
+from application.issue_flow import IssueFlowConfig, IssueFlowResult
 from infrastructure.http.schemas import RunWorkflowRequest, RunWorkflowResponse
 
 
