@@ -4,7 +4,7 @@ from pathlib import Path
 
 from application.issue_flow import IssueFlowConfig, IssueFlowDependencies
 from domain.payload import parse_payload
-from infrastructure.ai.crew_adapter import CrewAIProvider
+from infrastructure.ai.openai import OpenAIProvider
 from infrastructure.github.github_client import GitHubClient
 from infrastructure.http.mappers import to_issue_flow_config
 from infrastructure.http.schemas import RunWorkflowRequest
@@ -72,7 +72,7 @@ def build_issue_flow_dependencies(payload: RunWorkflowRequest) -> IssueFlowDepen
             git_author_email=git_author_email,
         ),
         repo_tree_summary=repo_tree_summary,
-        ai_provider=CrewAIProvider(),
+        ai_provider=OpenAIProvider.from_env(),
         parse_payload=parse_payload,
         apply_files=apply_files,
         publish_changes=publish_changes,
