@@ -9,7 +9,7 @@ from application.issue_flow import (
     run_issue_flow,
 )
 from infrastructure.github.github_client import GitHubClient
-from infrastructure.ai.openai import OpenAIProvider
+from infrastructure.ai.provider_factory import build_ai_provider_runtime_from_env
 from domain.payload import parse_payload
 from infrastructure.repo.file_writer import apply_files
 from infrastructure.repo.operations import (
@@ -50,13 +50,20 @@ def required_env(name: str) -> str:
 def main() -> None:
     log_event(logger, logging.INFO, "cli.workflow.start")
     github_token = required_env("GITHUB_TOKEN")
-    openai_api_key = required_env("OPENAI_API_KEY")
+    ai_runtime = build_ai_provider_runtime_from_env()
     owner = required_env("GH_OWNER")
     repo = required_env("GH_REPO")
     issue_number = int(required_env("ISSUE_NUMBER"))
     git_author_name = os.getenv("GIT_AUTHOR_NAME", "AI Bot")
     git_author_email = os.getenv("GIT_AUTHOR_EMAIL", "ai-bot@example.com")
-    register_sensitive_values(github_token, openai_api_key)
+    register_sensitive_values(github_token, ai_runtime.api_key)
+    log_event(
+        logger,
+        logging.INFO,
+        "workflow.ai.provider.selected",
+        provider=ai_runtime.provider,
+        model=ai_runtime.model,
+    )
 
     github_client = GitHubClient(token=github_token, owner=owner, repo=repo)
     flow_config = IssueFlowConfig(
@@ -78,7 +85,7 @@ def main() -> None:
             git_author_email=git_author_email,
         ),
         repo_tree_summary=repo_tree_summary,
-        ai_provider=OpenAIProvider.from_env(),
+        ai_provider=ai_runtime.adapter,
         parse_payload=parse_payload,
         apply_files=apply_files,
         publish_changes=publish_changes,
