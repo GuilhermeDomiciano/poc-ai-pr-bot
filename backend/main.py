@@ -9,7 +9,7 @@ from application.issue_flow import (
     run_issue_flow,
 )
 from infrastructure.github.github_client import GitHubClient
-from infrastructure.ai.crew_runner import run_crew
+from infrastructure.ai.crew_adapter import CrewAIProvider
 from domain.payload import parse_payload
 from infrastructure.repo.file_writer import apply_files
 from infrastructure.repo.operations import (
@@ -78,7 +78,7 @@ def main() -> None:
             git_author_email=git_author_email,
         ),
         repo_tree_summary=repo_tree_summary,
-        run_crew=run_crew,
+        ai_provider=CrewAIProvider(),
         parse_payload=parse_payload,
         apply_files=apply_files,
         publish_changes=publish_changes,

@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, TypedDict
 
+from application.ports import AIProvider
 from domain.models import ChangeSet
 
 
@@ -39,7 +40,7 @@ class IssueFlowDependencies:
     clone_repo: Callable[[str, str, Path], None]
     git_setup: Callable[[Path], None]
     repo_tree_summary: Callable[[Path], str]
-    run_crew: Callable[[str, str, str], str]
+    ai_provider: AIProvider
     parse_payload: Callable[[str], ChangeSet]
     apply_files: Callable[[Path, dict[str, str]], None]
     publish_changes: Callable[[Path, str, str], None]

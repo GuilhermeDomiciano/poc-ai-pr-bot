@@ -31,23 +31,27 @@ def prepare_repository(
     dependencies.git_setup(config.repository_directory)
 
 
-def generate_crew_output(
+def generate_ai_output(
     issue_title: str,
     issue_body: str,
     config: IssueFlowConfig,
     dependencies: IssueFlowDependencies,
 ) -> str:
-    # Resume a arvore de arquivos para contexto da IA e executa o crew multiagente.
+    # Resume a arvore de arquivos para contexto da IA e delega geracao ao provider ativo.
     repository_tree_summary = dependencies.repo_tree_summary(config.repository_directory)
-    return dependencies.run_crew(issue_title, issue_body, repository_tree_summary)
+    return dependencies.ai_provider.generate_changes(
+        issue_title,
+        issue_body,
+        repository_tree_summary,
+    )
 
 
 def parse_change_set(
-    crew_output_text: str,
+    ai_output_text: str,
     dependencies: IssueFlowDependencies,
 ) -> ChangeSet:
     # Converte texto da IA para ChangeSet validado e publica observabilidade do pacote gerado.
-    change_set = dependencies.parse_payload(crew_output_text)
+    change_set = dependencies.parse_payload(ai_output_text)
     dependencies.observe_change_set(change_set)
     return change_set
 

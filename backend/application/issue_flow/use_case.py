@@ -6,7 +6,7 @@ from application.issue_flow.contracts import (
 from application.issue_flow.steps import (
     build_dry_run_result,
     build_pr_or_branch_result,
-    generate_crew_output,
+    generate_ai_output,
     load_issue_context,
     parse_change_set,
     prepare_repository,
@@ -29,12 +29,12 @@ def run_issue_flow(
         prepare_repository(config, dependencies)
         dependencies.observe_step("prepare_repo", "success")
 
-        dependencies.observe_step("run_crew", "start")
-        crew_output_text = generate_crew_output(issue_title, issue_body, config, dependencies)
-        dependencies.observe_step("run_crew", "success")
+        dependencies.observe_step("generate_changes", "start")
+        ai_output_text = generate_ai_output(issue_title, issue_body, config, dependencies)
+        dependencies.observe_step("generate_changes", "success")
 
         dependencies.observe_step("validate_payload", "start")
-        change_set = parse_change_set(crew_output_text, dependencies)
+        change_set = parse_change_set(ai_output_text, dependencies)
         dependencies.observe_step(
             "validate_payload",
             "success",
